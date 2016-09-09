@@ -27,24 +27,6 @@
 const https = require('https');
 const kafka = require('kafka-node');
 
-/*
-var host = "";
-var port = "";
-
-/**
- * Set access details for the Kafka connection
- *
- * @param {string} host - the hostname of the domain (services) tier of the Information Server environment
- * @param {string} port - the port number of the Zookeeper service (e.g. 52181)
-exports.setServer = function(host, port) {
-  if (host === undefined || host === "" || port === undefined || port === "") {
-    throw new Error("Incomplete connection information -- missing host or port (or both).");
-  }
-  this.host = host;
-  this.port = port;
-}
- */
-
 /**
  * Connects to Kafka on the specified system and consumes any events raised
  *
@@ -59,13 +41,12 @@ exports.consumeEvents = function(zookeeperConnection, handler, bFromBeginning) {
   }
   var Consumer = kafka.Consumer;
   var client = new kafka.Client(zookeeperConnection, handler.id);
-  var consumer = null;
+  var consumerOpts = { groupId: handler.id, autoCommit: false };
   if (bFromBeginning) {
     console.log("Consuming all events, from the beginning...");
-    consumer = new Consumer(client, [{ topic: 'InfosphereEvents', offset: 0 }], {groupId: handler.id, autoCommit: false, fromOffset: true});
-  } else {
-    consumer = new Consumer(client, [{ topic: 'InfosphereEvents', offset: 0 }], {groupId: handler.id, autoCommit: false, fromOffset: false});
+    consumerOpts.fromOffset = true;
   }
+  var consumer = new Consumer(client, [{ topic: 'InfosphereEvents', offset: 0 }], consumerOpts);
   consumer.on('message', function(message) {
     var infosphereEvent = JSON.parse(message.value);
     // Only call out to the handler if the event type is registered as one the handler reacts to
