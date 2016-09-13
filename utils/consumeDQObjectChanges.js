@@ -16,6 +16,8 @@
  * limitations under the License.
  */
 
+"use strict";
+
 /**
  * @file Builds a fully-detailed object (including all related information) based on any changes to DQ-related objects
  * @license Apache-2.0
@@ -27,12 +29,12 @@
  * ./consumeDQObjectChanges.js -d hostname:9445 -z hostname:52181
  */
 
-var igcrest = require('ibm-igc-rest');
-var iiskafka = require('../');
+const igcrest = require('ibm-igc-rest');
+const iiskafka = require('../');
 
 // Command-line setup
-var yargs = require('yargs');
-var argv = yargs
+const yargs = require('yargs');
+const argv = yargs
     .usage('Usage: $0 -d <host>:<port> -z <host>:<port> -u <username> -p <password>')
     .env('DS')
     .option('d', {
@@ -63,27 +65,24 @@ var argv = yargs
     .argv;
 
 // Base settings
-var host_port = argv.domain.split(":");
-var dqHandler = new iiskafka.EventHandler('dq-handler', ['NEW_EXCEPTIONS_EVENT']);
+const host_port = argv.domain.split(":");
+const dqHandler = new iiskafka.EventHandler('dq-handler', ['NEW_EXCEPTIONS_EVENT']);
 
 igcrest.setAuth(argv.deploymentUser, argv.deploymentUserPassword);
 igcrest.setServer(host_port[0], host_port[1]);
 
 dqHandler.handleEvent = function(message, infosphereEvent) {
 
-  var tableName;
-  var ruleName;
-
   if (infosphereEvent.eventType === "NEW_EXCEPTIONS_EVENT") {
 
     if (infosphereEvent.applicationType === "Exception Stage") {
 
-      tableName = infosphereEvent.exceptionSummaryUID;
+      let tableName = infosphereEvent.exceptionSummaryUID;
       console.log("Table: " + tableName);
 
     } else if (infosphereEvent.applicationType === "Information Analyzer") {
 
-      ruleName = infosphereEvent.exceptionSummaryName;
+      let ruleName = infosphereEvent.exceptionSummaryName;
       console.log("Rule : " + ruleName);
 
     }
@@ -92,4 +91,4 @@ dqHandler.handleEvent = function(message, infosphereEvent) {
 
 };
 
-iiskafka.consumeEvents(argv.zookeeper, dqHandler, false);
+iiskafka.consumeEvents(argv.zookeeper, dqHandler, true);

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+"use strict";
+
 /**
  * @file Re-usable functions for interacting with IBM InfoSphere Information Server's Kafka event mechanism
  * @license Apache-2.0
@@ -24,8 +26,8 @@
  * @module ibm-iis-kafka
  */
 
-var https = require('https');
-var kafka = require('kafka-node');
+const https = require('https');
+const kafka = require('kafka-node');
 
 /**
  * Connects to Kafka on the specified system and consumes any events raised
@@ -36,22 +38,16 @@ var kafka = require('kafka-node');
  */
 exports.consumeEvents = function(zookeeperConnection, handler, bFromBeginning) {
 
-  var Consumer;
-  var client;
-  var consumerOpts;
-  var consumer;
-  var offset;
-  var firstEvent = 0;
-
-  if (typeof zookeeperConnection === undefined || zookeeperConnection === "" || zookeeperConnection.indexOf(":") == -1) {
+  if (typeof zookeeperConnection === undefined || zookeeperConnection === "" || zookeeperConnection.indexOf(":") === -1) {
     throw new Error("Incomplete connection information -- missing host or port (or both).");
   }
 
-  client = new kafka.Client(zookeeperConnection, handler.id);
-  consumerOpts = { groupId: handler.id, autoCommit: false };
+  const client = new kafka.Client(zookeeperConnection, handler.id);
+  const consumerOpts = { groupId: handler.id, autoCommit: false };
 
   // Retrieve the earliest offset for the topic (it will not always be 0)
-  offset = new kafka.Offset(client);
+  const offset = new kafka.Offset(client);
+  let firstEvent = 0;
   offset.fetch([{ topic: 'InfosphereEvents', partition: 0, time: -2, maxNum: 1 }], function (err, data) {
     
     if (err !== null) {
@@ -67,7 +63,7 @@ exports.consumeEvents = function(zookeeperConnection, handler, bFromBeginning) {
       console.log("Consuming only events triggered since last consumption...");
     }
 
-    consumer = new kafka.Consumer(client, [{ topic: 'InfosphereEvents', offset: firstEvent }], consumerOpts);
+    const consumer = new kafka.Consumer(client, [{ topic: 'InfosphereEvents', offset: firstEvent }], consumerOpts);
 
     function commitEvent() {
       consumer.commit(function(err, data) {
@@ -90,7 +86,7 @@ exports.consumeEvents = function(zookeeperConnection, handler, bFromBeginning) {
     }
   
     function processMessage(message) {
-      var infosphereEvent = JSON.parse(message.value);
+      const infosphereEvent = JSON.parse(message.value);
       // Only call out to the handler if the event type is registered as one the handler reacts to
       if (handler.getEventTypes().indexOf(infosphereEvent.eventType) > -1) {
         handler.handleEvent(message, infosphereEvent, checkStatus);
