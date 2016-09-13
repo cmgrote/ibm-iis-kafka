@@ -64,24 +64,26 @@ var argv = yargs
 
 // Base settings
 var host_port = argv.domain.split(":");
+var dqHandler = new iiskafka.EventHandler('dq-handler', ['NEW_EXCEPTIONS_EVENT']);
 
 igcrest.setAuth(argv.deploymentUser, argv.deploymentUserPassword);
 igcrest.setServer(host_port[0], host_port[1]);
 
-var dqHandler = new iiskafka.EventHandler('dq-handler', ['NEW_EXCEPTIONS_EVENT']);
-
 dqHandler.handleEvent = function(message, infosphereEvent) {
+
+  var tableName;
+  var ruleName;
 
   if (infosphereEvent.eventType === "NEW_EXCEPTIONS_EVENT") {
 
     if (infosphereEvent.applicationType === "Exception Stage") {
 
-      var tableName = infosphereEvent.exceptionSummaryUID;
+      tableName = infosphereEvent.exceptionSummaryUID;
       console.log("Table: " + tableName);
 
     } else if (infosphereEvent.applicationType === "Information Analyzer") {
 
-      var ruleName = infosphereEvent.exceptionSummaryName;
+      ruleName = infosphereEvent.exceptionSummaryName;
       console.log("Rule : " + ruleName);
 
     }
@@ -90,4 +92,4 @@ dqHandler.handleEvent = function(message, infosphereEvent) {
 
 };
 
-iiskafka.consumeEvents(argv.zookeeper, dqHandler, true);
+iiskafka.consumeEvents(argv.zookeeper, dqHandler, false);
