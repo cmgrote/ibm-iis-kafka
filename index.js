@@ -24,8 +24,8 @@
  * @module ibm-iis-kafka
  */
 
-const https = require('https');
-const kafka = require('kafka-node');
+var https = require('https');
+var kafka = require('kafka-node');
 
 /**
  * Connects to Kafka on the specified system and consumes any events raised
@@ -36,56 +36,87 @@ const kafka = require('kafka-node');
  */
 exports.consumeEvents = function(zookeeperConnection, handler, bFromBeginning) {
 
-  if (zookeeperConnection === undefined || zookeeperConnection === "" || zookeeperConnection.indexOf(":") == -1) {
+  var Consumer;
+  var client;
+  var consumerOpts;
+  var consumer;
+  var offset;
+  var firstEvent = 0;
+
+  if (typeof zookeeperConnection === undefined || zookeeperConnection === "" || zookeeperConnection.indexOf(":") == -1) {
     throw new Error("Incomplete connection information -- missing host or port (or both).");
   }
-  var Consumer = kafka.Consumer;
-  var client = new kafka.Client(zookeeperConnection, handler.id);
-  var consumerOpts = { groupId: handler.id, autoCommit: false };
-  if (bFromBeginning) {
-    console.log("Consuming all events, from the beginning...");
-    consumerOpts.fromOffset = true;
-  }
-  var consumer = new Consumer(client, [{ topic: 'InfosphereEvents', offset: 0 }], consumerOpts);
-  consumer.on('message', function(message) {
-    var infosphereEvent = JSON.parse(message.value);
-    // Only call out to the handler if the event type is registered as one the handler reacts to
-    if (handler.getEventTypes().indexOf(infosphereEvent.eventType) > -1) {
-      handler.handleEvent(message, infosphereEvent, function(status) {
-        if (status === undefined || status === "") {
-          console.error("ERROR: Failed to handle event (" + status + ")");
-        } else if (status === "SUCCESS") {
-          _commitEvent(consumer);
-        } else if (status.indexOf("WARN") > -1) {
-          console.warn(status);
-          _commitEvent(consumer);
+
+  client = new kafka.Client(zookeeperConnection, handler.id);
+  consumerOpts = { groupId: handler.id, autoCommit: false };
+
+  // Retrieve the earliest offset for the topic (it will not always be 0)
+  offset = new kafka.Offset(client);
+  offset.fetch([{ topic: 'InfosphereEvents', partition: 0, time: -2, maxNum: 1 }], function (err, data) {
+    
+    if (err !== null) {
+      throw new Error("Unable to retrieve an initial offset -- " + err);
+    } else {
+      firstEvent = data.InfosphereEvents["0"][0];
+    }
+
+    if (bFromBeginning) {
+      console.log("Consuming all events, from the beginning...");
+      consumerOpts.fromOffset = true;
+    } else {
+      console.log("Consuming only events triggered since last consumption...");
+    }
+
+    consumer = new kafka.Consumer(client, [{ topic: 'InfosphereEvents', offset: firstEvent }], consumerOpts);
+
+    function commitEvent() {
+      consumer.commit(function(err, data) {
+        if (err !== null) {
+          console.error("ERROR: Unable to commit Kafka event processing -- " + err);
+          console.error(data);
         }
       });
-    } else {
-      console.log("Ignoring event (" + infosphereEvent.eventType + ") and moving on...");
-      _commitEvent(consumer);
     }
-  });
-
-  process.on('SIGINT', function () {
-    consumer.close(true, function () {
-        process.exit();
+  
+    function checkStatus(status) {
+      if (typeof status === undefined || status === "") {
+        console.error("ERROR: Failed to handle event (" + status + ")");
+      } else if (status === "SUCCESS") {
+        commitEvent();
+      } else if (status.indexOf("WARN") > -1) {
+        console.warn(status);
+        commitEvent();
+      }
+    }
+  
+    function processMessage(message) {
+      var infosphereEvent = JSON.parse(message.value);
+      // Only call out to the handler if the event type is registered as one the handler reacts to
+      if (handler.getEventTypes().indexOf(infosphereEvent.eventType) > -1) {
+        handler.handleEvent(message, infosphereEvent, checkStatus);
+      } else {
+        console.log("Ignoring event (" + infosphereEvent.eventType + ") and moving on...");
+        commitEvent();
+      }
+    }
+  
+    consumer.on('message', processMessage);
+    consumer.on('error', function(err) {
+      throw new Error("Unable to consume messages from Kafka -- " + JSON.stringify(err));
     });
+    consumer.on('offsetOutOfRange', function(err) {
+      throw new Error("Unable to consume messages from Kafka (offsetOutOfRange) -- " + JSON.stringify(err));
+    });
+  
+    process.on('SIGINT', function () {
+      consumer.close(true, function () {
+        process.exit();
+      });
+    });
+
   });
 
-}
-
-/**
- * @private
- */
-function _commitEvent(consumer) {
-  consumer.commit(function(err, data) {
-    if (err !== null) {
-      console.error("ERROR: Unable to commit Kafka event processing -- " + err);
-      console.error(data);
-    }
-  });
-}
+};
 
 /**
  * @namespace
@@ -133,6 +164,6 @@ EventHandler.prototype = {
  * @param {Object} infosphereEvent - the InfoSphere Event that was consumed
  */
 
-if (typeof require == 'function') {
+if (typeof require === 'function') {
   exports.EventHandler = EventHandler;
 }
