@@ -26,7 +26,6 @@
  * @module ibm-iis-kafka
  */
 
-const https = require('https');
 const kafka = require('kafka-node');
 
 /**
@@ -64,26 +63,6 @@ exports.consumeEvents = function(zookeeperConnection, handler, bFromBeginning) {
     }
 
     const consumer = new kafka.Consumer(client, [{ topic: 'InfosphereEvents', offset: firstEvent }], consumerOpts);
-
-    function commitEvent() {
-      consumer.commit(function(err, data) {
-        if (err !== null) {
-          console.error("ERROR: Unable to commit Kafka event processing -- " + err);
-          console.error(data);
-        }
-      });
-    }
-  
-    function checkStatus(status) {
-      if (typeof status === undefined || status === "") {
-        console.error("ERROR: Failed to handle event (" + status + ")");
-      } else if (status === "SUCCESS") {
-        commitEvent();
-      } else if (status.indexOf("WARN") > -1) {
-        console.warn(status);
-        commitEvent();
-      }
-    }
   
     function processMessage(message) {
       const infosphereEvent = JSON.parse(message.value);
@@ -94,6 +73,26 @@ exports.consumeEvents = function(zookeeperConnection, handler, bFromBeginning) {
         console.log("Ignoring event (" + infosphereEvent.eventType + ") and moving on...");
         commitEvent();
       }
+    }
+
+    function checkStatus(status) {
+      if (typeof status === undefined || status === "") {
+        console.error("ERROR: Failed to handle event (" + status + ")");
+      } else if (status === "SUCCESS") {
+        commitEvent();
+      } else if (status.indexOf("WARN") > -1) {
+        console.warn(status);
+        commitEvent();
+      }
+    }
+
+    function commitEvent() {
+      consumer.commit(function(err, data) {
+        if (err !== null) {
+          console.error("ERROR: Unable to commit Kafka event processing -- " + err);
+          console.error(data);
+        }
+      });
     }
   
     consumer.on('message', processMessage);
