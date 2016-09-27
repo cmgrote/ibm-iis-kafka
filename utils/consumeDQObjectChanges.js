@@ -66,29 +66,189 @@ const argv = yargs
 
 // Base settings
 const host_port = argv.domain.split(":");
-const dqHandler = new iiskafka.EventHandler('dq-handler', ['NEW_EXCEPTIONS_EVENT']);
-
 igcrest.setAuth(argv.deploymentUser, argv.deploymentUserPassword);
 igcrest.setServer(host_port[0], host_port[1]);
 
-dqHandler.handleEvent = function(message, infosphereEvent) {
+const infosphereEventEmitter = new iiskafka.InfosphereEventEmitter(argv.zookeeper, 'dq-object-handler', true);
 
-  if (infosphereEvent.eventType === "NEW_EXCEPTIONS_EVENT") {
+infosphereEventEmitter.on('IGC_BUSINESSRULE_EVENT', processInfoGovernanceRule);
+infosphereEventEmitter.on('IA_DATARULE_CREATED_EVENT', processNewDataRule);
+infosphereEventEmitter.on('IA_DATARULE_MODIFIED_EVENT', processChangedDataRule);
+infosphereEventEmitter.on('IGC_STEWARD_EVENT', processDataSteward);
+infosphereEventEmitter.on('error', function(errMsg) {
+  console.error("Received 'error' -- aborting process: " + errMsg);
+  process.exit(1);
+});
+infosphereEventEmitter.on('end', function() {
+  console.log("Event emitter stopped -- ending process.");
+  process.exit();
+});
 
-    if (infosphereEvent.applicationType === "Exception Stage") {
-
-      let tableName = infosphereEvent.exceptionSummaryUID;
-      console.log("Table: " + tableName);
-
-    } else if (infosphereEvent.applicationType === "Information Analyzer") {
-
-      let ruleName = infosphereEvent.exceptionSummaryName;
-      console.log("Rule : " + ruleName);
-
-    }
-
+function handleError(ctxMsg, errMsg) {
+  if (typeof errMsg !== 'undefined' && errMsg !== null) {
+    console.error("Failed " + ctxMsg + " -- " + errMsg);
+    process.exit(1);
   }
+}
 
-};
+function processInfoGovernanceRule(infosphereEvent, eventCtx, commitCallback) {
+  console.log("Processing an Information Governance Rule...");
+  const rid = infosphereEvent.ASSET_RID;
+  const action = infosphereEvent.ACTION;
+  const name = infosphereEvent.ASSET_NAME;
+  const ctx = infosphereEvent.ASSET_CONTEXT;
+  console.log(JSON.stringify(infosphereEvent));
+  commitCallback(eventCtx);
+}
 
-iiskafka.consumeEvents(argv.zookeeper, dqHandler, true);
+function processNewDataRule(infosphereEvent, eventCtx, commitCallback) {
+  console.log("Processing a new Data Rule...");
+  const projectRid = infosphereEvent.projectRid;
+  const tamRid = infosphereEvent.tamRid; // TODO: this cannot be resolved to anything by REST API ("Asset not supported")
+  const ruleName = ""; // TODO: this is not provided in the Kafka message...
+  console.log(JSON.stringify(infosphereEvent));
+  //getDataRuleDetails(ruleName);
+  commitCallback(eventCtx);
+}
+
+// TODO: receives the same information as a NEW event (above) -- just call out to the same generic logic
+function processChangedDataRule(infosphereEvent, eventCtx, commitCallback) {
+  console.log("Processing a modified Data Rule...");
+  const projectRid = infosphereEvent.projectRid;
+  const tamRid = infosphereEvent.tamRid; // TODO: this cannot be resolved to anything by REST API ("Asset not supported")
+  const ruleName = ""; // TODO: this is not provided in the Kafka message...
+  console.log(JSON.stringify(infosphereEvent));
+  //getDataRuleDetails(ruleName);
+  commitCallback(eventCtx);
+}
+
+// TODO: filter down these events to only those that are DQ-relevant (the event itself will be ANY steward event, not only those related to DQ objects)
+function processDataSteward(infosphereEvent, eventCtx, commitCallback) {
+  console.log("Processing a Data Steward...");
+  const rid = infosphereEvent.ASSET_RID;          // the RID of the object that was assigned the Steward
+  const action = infosphereEvent.ACTION;          // e.g. ASSIGNED_RELATIONSHIP
+  const stewardName = infosphereEvent.ASSET_NAME; // Note: this is the full name, not username
+  const ctx = infosphereEvent.ASSET_CONTEXT;
+  console.log(JSON.stringify(infosphereEvent));
+  commitCallback(eventCtx);
+}
+
+function getDataRuleDetails(ruleName) {
+  
+  const iaDataRuleQ = {
+    "pageSize": "10000",
+    "properties": [ "name", "implements_rules", "implements_rules.referencing_policies", "implements_rules.governs_assets", "implemented_bindings", "implemented_bindings.assigned_to_terms", "implemented_bindings.assigned_to_terms.stewards" ],
+    "types": [ "data_rule" ],
+    "operator": "and",
+    "conditions":
+    [
+      {
+        "property": "name",
+        "operator": "=",
+        "value": ruleName
+      }
+    ]
+  };
+
+  igcrest.search(iaDataRuleQ, function (err, resSearch) {
+
+    if (resSearch.items.length === 0) {
+      console.warn("WARN: Did not find any Data Rules with the name '" + ruleName + "'.");
+    } else {
+  
+      for (let r = 0; r < resSearch.items.length; r++) {
+  
+        const rule = resSearch.items[r];
+        const ruleName = rule._name;
+        const policyDetails = rule["implements_rules.referencing_policies"].items;
+        const infoGovRuleDetails = rule.implements_rules.items;
+        const termDetails = rule["implemented_bindings.assigned_to_terms"].items;
+        const governedAssets = rule["implements_rules.governs_assets"].items;
+        const bindingDetails = rule.implemented_bindings.items;
+  
+        if (policyDetails.length === 0 || infoGovRuleDetails.length === 0 || bindingDetails.length === 0) {
+          console.warn("WARN: Rule '" + ruleName + "' is missing one or more required relationships.");
+        } else {
+          const dqDimension = policyDetails[0]._name;
+          const infoGovRuleName = infoGovRuleDetails[0]._name;
+          const aColNames = [];
+          const aColRIDs = [];
+          for (let i = 0; i < bindingDetails.length; i++) {
+            aColNames.push(bindingDetails[i]._name);
+            aColRIDs.push(bindingDetails[i]._id);
+          }
+
+          const aTerms = [];
+          const aStewards = [];
+          let iFoundTerms = 0;
+          const iProcessedTerms = 0;
+          if (termDetails.length === 0) {
+            for (let i = 0; i < governedAssets.length; i++) {
+              if (governedAssets[i]._type === "term") {
+                iFoundTerms++;
+                aTerms.push(governedAssets[i]._name);
+                const objDetails = {
+                  'ruleName': ruleName,
+                  'infoGovRuleName': infoGovRuleName,
+                  'dqDimension': dqDimension,
+                  'aColNames': aColNames,
+                  'aColRIDs': aColRIDs,
+                  'aTerms': aTerms
+                };
+                getDataOwners("term", governedAssets[i]._id, objDetails, iProcessedTerms, iFoundTerms, aStewards, processAllCollectedDataForRule);
+              }
+            }
+          } else {
+            for (let i = 0; i < termDetails.length; i++) {
+              iFoundTerms++;
+              aTerms.push(termDetails[i]._name);
+              const objDetails = {
+                'ruleName': ruleName,
+                'infoGovRuleName': infoGovRuleName,
+                'dqDimension': dqDimension,
+                'aColNames': aColNames,
+                'aColRIDs': aColRIDs,
+                'aTerms': aTerms
+              };
+              getDataOwners("term", termDetails[i]._id, objDetails, iProcessedTerms, iFoundTerms, aStewards, processAllCollectedDataForRule);
+            }
+          }
+        }
+  
+      }
+  
+    }
+  
+  });
+
+}
+
+function getDataOwners(type, rid, passthru, iProcessed, iFound, aStewardsSoFar, callback) {
+  igcrest.getAssetPropertiesById(rid, type, ["stewards"], 100, true, function(err, resAsset) {
+    let errAsset = err;
+    const aStewardsForAsset = [];
+    if (resAsset === undefined || (errAsset !== null && errAsset.startsWith("WARN: No assets found"))) {
+      errAsset = "Unable to find a " + type + " with RID = " + rid;
+    } else {
+      const stewards = resAsset.stewards.items;
+      for (let j = 0; j < stewards.length; j++) {
+        aStewardsForAsset.push(stewards[j]._name);
+      }
+    }
+    return callback(errAsset, aStewardsForAsset, iProcessed, iFound, passthru, aStewardsSoFar);
+  });
+}
+
+function processAllCollectedDataForRule(err, aStewardsForOneObject, iProcessed, iFound, passthru, aStewards) {
+  handleError("processing data collected for rule", err);
+  iProcessed++;
+  aStewards.push.apply(aStewards, aStewardsForOneObject);
+  if (iProcessed === iFound) {
+    console.log("Found the following for rule '" + passthru.ruleName + "':");
+    console.log("  - Info gov rule   = " + passthru.infoGovRuleName);
+    console.log("  - DQ dimension    = " + passthru.dqDimension);
+    console.log("  - Bound column    = " + passthru.aColNames + " (" + passthru.aColRIDs + ")");
+    console.log("  - Related term(s) = " + passthru.aTerms);
+    console.log("  - Data owner(s)   = " + aStewards);
+  }
+}
