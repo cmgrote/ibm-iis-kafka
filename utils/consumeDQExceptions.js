@@ -70,7 +70,7 @@ const host_port = argv.domain.split(":");
 iarest.setAuth(argv.deploymentUser, argv.deploymentUserPassword);
 iarest.setServer(host_port[0], host_port[1]);
 
-const infosphereEventEmitter = new iiskafka.InfosphereEventEmitter(argv.zookeeper, 'dq-handler', true);
+const infosphereEventEmitter = new iiskafka.InfosphereEventEmitter(argv.zookeeper, 'dq-event-handler', true);
 
 infosphereEventEmitter.on('NEW_EXCEPTIONS_EVENT', processFailedRecords);
 infosphereEventEmitter.on('error', function(errMsg) {
