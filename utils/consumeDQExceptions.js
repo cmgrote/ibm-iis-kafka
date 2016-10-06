@@ -23,6 +23,7 @@
  * @license Apache-2.0
  * @requires ibm-ia-rest
  * @requires ibm-iis-kafka
+ * @requires ibm-iis-commons
  * @requires yargs
  * @example
  * // monitors all exception events on hostname, and outputs summary statistics and detailed records
@@ -30,6 +31,7 @@
  */
 
 const iarest = require('ibm-ia-rest');
+const commons = require('ibm-iis-commons');
 const iiskafka = require('../');
 
 // Command-line setup
@@ -67,10 +69,10 @@ const argv = yargs
 // Base settings
 const host_port = argv.domain.split(":");
 
-iarest.setAuth(argv.deploymentUser, argv.deploymentUserPassword);
-iarest.setServer(host_port[0], host_port[1]);
+const restConnect = new commons.RestConnection(argv.deploymentUser, argv.deploymentUserPassword, host_port[0], host_port[1]);
+iarest.setConnection(restConnect);
 
-const infosphereEventEmitter = new iiskafka.InfosphereEventEmitter(argv.zookeeper, 'dq-event-handler', true);
+const infosphereEventEmitter = new iiskafka.InfosphereEventEmitter(argv.zookeeper, 'dq-event-handler', false);
 
 infosphereEventEmitter.on('NEW_EXCEPTIONS_EVENT', processFailedRecords);
 infosphereEventEmitter.on('error', function(errMsg) {
@@ -94,6 +96,7 @@ function processFailedRecords(infosphereEvent, eventCtx, commitCallback) {
   // DataStage-generated failed records...
   if (infosphereEvent.applicationType === "Exception Stage") {
 
+    // TODO: handle DataStage-generated exceptions
     let tableName = infosphereEvent.exceptionSummaryUID;
     console.log("Table: " + tableName);
     commitCallback(eventCtx);
@@ -105,7 +108,15 @@ function processFailedRecords(infosphereEvent, eventCtx, commitCallback) {
     console.log("Rule : " + ruleName);
     iarest.getRuleExecutionResults(infosphereEvent.projectName, ruleName, false, function(err, aStats) {
       handleError("retrieving rule execution results", err);
-      console.log(JSON.stringify(aStats));
+      for (let i = 0; i < aStats.length; i++) {
+        const stat = aStats[i];
+        console.log(stat.dStart + " - " + stat.dEnd);
+        console.log("  failed: " + stat.numFailed);
+        console.log("  passed: " + (stat.numTotal - stat.numFailed));
+        console.log("  total : " + stat.numTotal);
+        console.log("  pass% : " + ((stat.numTotal - stat.numFailed) / stat.numTotal));
+      }
+      //console.log(JSON.stringify(aStats));
       iarest.getRuleExecutionFailedRecordsFromLastRun(infosphereEvent.projectName, ruleName, 100, function(errRecords, aRecords, colMap) {
         handleError("retrieving detailed failed records", errRecords);
         console.log(JSON.stringify(aRecords));

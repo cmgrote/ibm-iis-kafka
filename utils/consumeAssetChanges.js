@@ -23,6 +23,7 @@
  * @license Apache-2.0
  * @requires ibm-igc-rest
  * @requires ibm-iis-kafka
+ * @requires ibm-iis-commons
  * @requires yargs
  * @example
  * // monitors any Information Asset-related object changes on hostname, and constructs fully-detailed objects whenever an Information Asset-related object changes
@@ -30,6 +31,7 @@
  */
 
 const igcrest = require('ibm-igc-rest');
+const commons = require('ibm-iis-commons');
 const iiskafka = require('../');
 
 // Command-line setup
@@ -66,10 +68,10 @@ const argv = yargs
 
 // Base settings
 const host_port = argv.domain.split(":");
-igcrest.setAuth(argv.deploymentUser, argv.deploymentUserPassword);
-igcrest.setServer(host_port[0], host_port[1]);
+const restConnect = new commons.RestConnection(argv.deploymentUser, argv.deploymentUserPassword, host_port[0], host_port[1]);
+igcrest.setConnection(restConnect);
 
-const infosphereEventEmitter = new iiskafka.InfosphereEventEmitter(argv.zookeeper, 'asset-object-handler', true);
+const infosphereEventEmitter = new iiskafka.InfosphereEventEmitter(argv.zookeeper, 'asset-object-handler', false);
 
 infosphereEventEmitter.on('IMAM_SHARE_EVENT', processMetadataImport);
 infosphereEventEmitter.on('IGC_DATABASESGROUP_EVENT', processDatabaseChange);
