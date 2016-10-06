@@ -46,43 +46,26 @@ function InfosphereEventEmitter(zookeeperConnection, handlerId, bFromBeginning) 
   }
 
   const client = new kafka.Client(zookeeperConnection, handlerId);
-  const consumerOpts = { groupId: handlerId, autoCommit: false };
-
-  // Retrieve the earliest offset for the topic (it will not always be 0)
+  const consumerOpts = { groupId: handlerId, autoCommit: false, fromOffset: true };
+  const payload = { topic: 'InfosphereEvents' };
   const offset = new kafka.Offset(client);
-  let firstEvent = 0;
-  offset.fetch([{ topic: 'InfosphereEvents', partition: 0, time: -2, maxNum: 1 }], function (err, data) {
+
+  function commitEvent(kafkaEventCtx) {
+    console.log(" ... committing offset: " + JSON.stringify(kafkaEventCtx));
+    offset.commit(handlerId, [ kafkaEventCtx ], function(err, data) {
+      if (typeof err !== 'undefined' && err !== null) {
+        self.emit('error', "Unable to commit Kafka event as processed -- " + err + " (" + data + ")");
+      }
+    });
+  }
     
-    if (err !== null) {
-      self.emit('error', "Unable to retrieve an initial offset -- " + err);
-    } else {
-      firstEvent = data.InfosphereEvents["0"][0];
-    }
+  function emitEvent(message) {
+    const infosphereEvent = JSON.parse(message.value);
+    const eventCtx = { topic: message.topic, offset: message.offset, partition: message.partition };
+    self.emit(infosphereEvent.eventType, infosphereEvent, eventCtx, commitEvent);
+  }
 
-    if (bFromBeginning) {
-      console.log("Consuming all events, from the beginning...");
-      consumerOpts.fromOffset = true;
-    } else {
-      console.log("Consuming only events triggered since last consumption...");
-    }
-
-    const consumer = new kafka.Consumer(client, [{ topic: 'InfosphereEvents', offset: firstEvent }], consumerOpts);
-
-    function commitEvent(kafkaEventCtx) {
-      console.log(" ... committing offset: " + JSON.stringify(kafkaEventCtx));
-      offset.commit(handlerId, [ kafkaEventCtx ], function(err, data) {
-        if (typeof err !== 'undefined' && err !== null) {
-          self.emit('error', "Unable to commit Kafka event as processed -- " + err + " (" + data + ")");
-        }
-      });
-    }
-  
-    function emitEvent(message) {
-      const infosphereEvent = JSON.parse(message.value);
-      const eventCtx = { topic: message.topic, offset: message.offset, partition: message.partition };
-      self.emit(infosphereEvent.eventType, infosphereEvent, eventCtx, commitEvent);
-    }
-
+  function handleEvents(consumer) {
     consumer.on('message', emitEvent);
     consumer.on('error', function(err) {
       self.emit('error', "Unable to consume messages from Kafka -- " + JSON.stringify(err));
@@ -90,143 +73,66 @@ function InfosphereEventEmitter(zookeeperConnection, handlerId, bFromBeginning) 
     consumer.on('offsetOutOfRange', function(err) {
       self.emit('error', "Unable to consume messages from Kafka (offsetOutOfRange) -- " + JSON.stringify(err));
     });
-  
+    
     process.on('SIGINT', function () {
       consumer.close(true, function () {
         self.emit('end');
         process.exit();
       });
     });
+  }
 
-  });
+  function _processFromStart() {
+
+    console.log("Consuming all events, from the beginning...");
+    // Retrieve the earliest offset for the topic (it will not always be 0)
+    let firstEvent = 0;
+    offset.fetch([{ topic: 'InfosphereEvents', partition: 0, time: -2, maxNum: 1 }], function (err, data) {
+      
+      if (err !== null) {
+        self.emit('error', "Unable to retrieve an initial offset -- " + err);
+      } else {
+        firstEvent = data.InfosphereEvents["0"][0];
+      }
+
+      payload.offset = firstEvent;
+      const consumer = new kafka.Consumer(client, [ payload ], consumerOpts);
+      handleEvents(consumer);
+  
+    });
+  }
+
+  if (bFromBeginning) {
+    _processFromStart();
+  } else {
+
+    // Retrieve the last committed offset for the topic (it will be -1 if the handler is new)
+    let lastCommit = -1;
+    offset.fetchCommits(handlerId, [{ topic: 'InfosphereEvents', partition: 0 }], function (err, data) {
+
+      if (err !== null) {
+        self.emit('error', "Unable to retrieve the last committed offset -- " + err);
+      } else {
+        lastCommit = data.InfosphereEvents["0"];
+      }
+
+      // If we still come back with '-1' as the last committed offset, we need to start at the beginning...
+      if (lastCommit === -1) {
+        _processFromStart();
+      } else {
+        console.log("Consuming only events triggered since last consumption (starting at offset: " + lastCommit + ")...");
+        payload.offset = lastCommit;
+        const consumer = new kafka.Consumer(client, [ payload ], consumerOpts);
+        handleEvents(consumer);
+      }
+
+    });
+
+  }
 
 }
 
 util.inherits(InfosphereEventEmitter, EventEmitter);
-
-/**
- * Connects to Kafka on the specified system and consumes any events raised
- *
- * @param {string} zookeeperConnection - the hostname of the domain (services) tier of the Information Server environment and port number to connect to Zookeeper service (e.g. hostname:52181)
- * @param {EventHandler} handler - the handler that should be used to handle any events consumed
- * @param {boolean} [bFromBeginning] - if true, process all events from the beginning of tracking in Information Server
- */
-exports.consumeEvents = function(zookeeperConnection, handler, bFromBeginning) {
-
-  if (typeof zookeeperConnection === undefined || zookeeperConnection === "" || zookeeperConnection.indexOf(":") === -1) {
-    throw new Error("Incomplete connection information -- missing host or port (or both).");
-  }
-
-  const client = new kafka.Client(zookeeperConnection, handler.id);
-  const consumerOpts = { groupId: handler.id, autoCommit: false };
-
-  // Retrieve the earliest offset for the topic (it will not always be 0)
-  const offset = new kafka.Offset(client);
-  let firstEvent = 0;
-  offset.fetch([{ topic: 'InfosphereEvents', partition: 0, time: -2, maxNum: 1 }], function (err, data) {
-    
-    if (err !== null) {
-      throw new Error("Unable to retrieve an initial offset -- " + err);
-    } else {
-      firstEvent = data.InfosphereEvents["0"][0];
-    }
-
-    if (bFromBeginning) {
-      console.log("Consuming all events, from the beginning...");
-      consumerOpts.fromOffset = true;
-    } else {
-      console.log("Consuming only events triggered since last consumption...");
-    }
-
-    const consumer = new kafka.Consumer(client, [{ topic: 'InfosphereEvents', offset: firstEvent }], consumerOpts);
-  
-    function processMessage(message) {
-      const infosphereEvent = JSON.parse(message.value);
-      // Only call out to the handler if the event type is registered as one the handler reacts to
-      if (handler.getEventTypes().indexOf(infosphereEvent.eventType) > -1) {
-        handler.handleEvent({ topic: message.topic, offset: message.offset, partition: message.partition }, infosphereEvent, checkStatus);
-      } else {
-        console.log("Ignoring event (" + infosphereEvent.eventType + ") and moving on...");
-        commitEvent({ topic: message.topic, offset: message.offset, partition: message.partition });
-      }
-    }
-
-    function checkStatus(kafkaEventDetails, status) {
-      if (typeof status === 'undefined' || status === "") {
-        console.error("ERROR: Failed to handle event (" + status + ")");
-      } else if (status === "SUCCESS") {
-        commitEvent(kafkaEventDetails);
-      } else if (status.indexOf("WARN") > -1) {
-        console.warn(status);
-        commitEvent(kafkaEventDetails);
-      }
-    }
-
-    function commitEvent(kafkaEventDetails) {
-      console.log(" ... committing offset: " + JSON.stringify(kafkaEventDetails));
-      offset.commit(handler.id, [ kafkaEventDetails ], function(err, data) {
-        if (typeof err !== 'undefined' && err !== null) {
-          throw new Error("Unable to commit Kafka event as processed -- " + err + " (" + data + ")");
-        }
-      });
-    }
-
-    consumer.on('message', processMessage);
-    consumer.on('error', function(err) {
-      throw new Error("Unable to consume messages from Kafka -- " + JSON.stringify(err));
-    });
-    consumer.on('offsetOutOfRange', function(err) {
-      throw new Error("Unable to consume messages from Kafka (offsetOutOfRange) -- " + JSON.stringify(err));
-    });
-  
-    process.on('SIGINT', function () {
-      consumer.close(true, function () {
-        process.exit();
-      });
-    });
-
-  });
-
-};
-
-/**
- * @namespace
- */
-
-/**
- * @constructor
- *
- * @param {string} id - a unique identifer for this event handler
- * @param {string[]} eventTypes - an array of the event types this handler wants to monitor
- */
-function EventHandler(id, eventTypes) {
-  this.id = id;
-  this.aEventTypes = eventTypes;
-}
-EventHandler.prototype = {
-
-  id: null,
-  aEventTypes: null,
-
-  /**
-   * Retrieve the eventTypes monitored by this EventHandler
-   * 
-   * @function
-   */
-  getEventTypes: function() {
-    return this.aEventTypes;
-  },
-
-  /**
-   * Override this function to define how the event should be handled
-   * 
-   * @param {Object} message - the Kafka message in its entirety
-   * @param {Object} infosphereEvent - the Information Server event
-   * @function
-   */
-  handleEvent: function(message, infosphereEvent) { }
-
-};
 
 /**
  * This callback is invoked as the result of consuming an event from Kafka
@@ -237,5 +143,4 @@ EventHandler.prototype = {
 
 if (typeof require === 'function') {
   exports.InfosphereEventEmitter = InfosphereEventEmitter;
-  exports.EventHandler = EventHandler;
 }
