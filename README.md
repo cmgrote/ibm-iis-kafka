@@ -31,13 +31,12 @@ Connects to Kafka on the specified system and emits any events raised, based on 
 -   `handlerId` **[string](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String)** a unique identity for the handler (allowing multiple handlers to consume the same events)
 -   `bFromBeginning` **[boolean](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Boolean)?** if true, process all events from the beginning of tracking in Information Server
 
-## eventCallback
+## eventCommitCallback
 
-This callback is invoked as the result of consuming an event from Kafka
+This callback is invoked as in order to commit that an event was successfully consumed from Kafka
 
 Type: [Function](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/function)
 
 **Parameters**
 
--   `kafkaMessage` **[Object](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object)** the full Kafka message consumed
--   `infosphereEvent` **[Object](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object)** the InfoSphere Event that was consumed
+-   `eventCtx` **[Object](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object)** the context of the Kafka event that was consumed

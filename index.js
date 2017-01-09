@@ -151,10 +151,9 @@ function InfosphereEventEmitter(zookeeperConnection, handlerId, bFromBeginning) 
 util.inherits(InfosphereEventEmitter, EventEmitter);
 
 /**
- * This callback is invoked as the result of consuming an event from Kafka
- * @callback eventCallback
- * @param {Object} kafkaMessage - the full Kafka message consumed
- * @param {Object} infosphereEvent - the InfoSphere Event that was consumed
+ * This callback is invoked as in order to commit that an event was successfully consumed from Kafka
+ * @callback eventCommitCallback
+ * @param {Object} eventCtx - the context of the Kafka event that was consumed
  */
 
 if (typeof require === 'function') {
