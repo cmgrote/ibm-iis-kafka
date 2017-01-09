@@ -16,19 +16,35 @@
 
 "use strict";
 
+const kafka = require('kafka-node');
+const util = require('util');
+const EventEmitter = require('events').EventEmitter;
+
 /**
  * @file Re-usable functions for interacting with IBM InfoSphere Information Server's Kafka event mechanism
  * @license Apache-2.0
  * @requires kafka-node
+ * @requires util
+ * @requires events
  */
 
 /**
  * @module ibm-iis-kafka
+ * @example
+ * const iiskafka = require('ibm-iis-kafka');
+ * const infosphereEventEmitter = new iiskafka.InfosphereEventEmitter('zookeeper-host:2181', 'asset-object-handler', false);
+ * infosphereEventEmitter.on('IGC_DATABASESGROUP_EVENT', function(infosphereEvent, eventCtx, commitCallback) {
+ *   console.log("Processing a change to a Database object:");
+ *   console.log("  ... type (display name): " + infosphereEvent.ASSET_TYPE);
+ *   console.log("  ... unique ID (RID)    : " + infosphereEvent.ASSET_RID);
+ *   console.log("  ... parent identity    : " + infosphereEvent.ASSET_CONTEXT);
+ *   console.log("  ... asset identity     : " + infosphereEvent.ASSET_NAME);
+ *   console.log("  ... action taken       : " + infosphereEvent.ACTION);
+ *   console.log("Full event: " + JSON.stringify(infosphereEvent));
+ *   commitCallback(eventCtx); // tell Kafka we've successfully consumed this event
+ * });
  */
-
-const kafka = require('kafka-node');
-const util = require('util');
-const EventEmitter = require('events').EventEmitter;
+const _unused = "For documentation generation purposes...";
 
 /**
  * Connects to Kafka on the specified system and emits any events raised, based on their eventType
