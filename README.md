@@ -4,6 +4,8 @@
 
 ## ibm-iis-kafka
 
+Re-usable functions for interacting with IBM InfoSphere Information Server's Kafka event mechanism
+
 **Examples**
 
 ```javascript
@@ -20,6 +22,10 @@ infosphereEventEmitter.on('IGC_DATABASESGROUP_EVENT', function(infosphereEvent, 
   commitCallback(eventCtx); // tell Kafka we've successfully consumed this event
 });
 ```
+
+**Meta**
+
+-   **license**: Apache-2.0
 
 ## InfosphereEventEmitter
 
