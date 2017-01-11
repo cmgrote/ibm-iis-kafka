@@ -6,7 +6,6 @@
   "files": [
     "index.js",
     "docs",
-    "utils",
     "LICENSE"
   ],
   "dependencies": {
