@@ -1,6 +1,6 @@
 {
   "name": "ibm-iis-kafka",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "description": "Library to interact with IBM InfoSphere Information Server's Kafka events",
   "main": "./index.js",
   "files": [
@@ -36,16 +36,16 @@
   "contributors": [
     {
       "name": "Christopher Grote",
-      "email": "christopher.grote@uk.ibm.com"
+      "email": "chris@thegrotes.net"
     }
   ],
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.ibm.com/christopher-grote/ibm-iis-kafka.git"
+    "url": "https://github.com/cmgrote/ibm-iis-kafka.git"
   },
   "bugs": {
-    "url": "https://github.ibm.com/christopher-grote/ibm-iis-kafka/issues"
+    "url": "https://github.com/cmgrote/ibm-iis-kafka/issues"
   },
-  "homepage": "https://github.ibm.com/christopher-grote/ibm-iis-kafka"
+  "homepage": "https://github.com/cmgrote/ibm-iis-kafka"
 }
