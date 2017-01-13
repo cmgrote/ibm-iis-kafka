@@ -62,8 +62,10 @@ function InfosphereEventEmitter(zookeeperConnection, handlerId, bFromBeginning) 
   const payload = { topic: 'InfosphereEvents' };
   const offset = new kafka.Offset(client);
 
-  function commitEvent(kafkaEventCtx) {
-    console.log(" ... committing offset: " + JSON.stringify(kafkaEventCtx));
+  function commitEvent(kafkaEventCtx, bVerbose) {
+    if (bVerbose) {
+      console.log(" ... committing offset: " + JSON.stringify(kafkaEventCtx));
+    }
     offset.commit(handlerId, [ kafkaEventCtx ], function(err, data) {
       if (typeof err !== 'undefined' && err !== null) {
         self.emit('error', "Unable to commit Kafka event as processed -- " + err + " (" + data + ")");
