@@ -1,6 +1,6 @@
 {
   "name": "ibm-iis-kafka",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Re-usable functions for interacting with IBM InfoSphere Information Server's Kafka event mechanism",
   "main": "./index.js",
   "files": [
