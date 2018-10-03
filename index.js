@@ -43,13 +43,14 @@ const util = require('util');
 const EventEmitter = require('events').EventEmitter;
 
 /**
- * Connects to Kafka on the specified system and emits any events raised, based on their eventType
+ * Connects to Kafka on the specified system and emits any events raised, based on the specified parameter
  *
  * @param {string} zookeeperConnection - the hostname of the domain (services) tier of the Information Server environment and port number to connect to Zookeeper service (e.g. hostname:52181)
  * @param {string} handlerId - a unique identity for the handler (allowing multiple handlers to consume the same events)
  * @param {boolean} [bFromBeginning] - if true, process all events from the beginning of tracking in Information Server
+ * @param {string} [topic] - name of the topic for which to emit events
  */
-function InfosphereEventEmitter(zookeeperConnection, handlerId, bFromBeginning) {
+function InfosphereEventEmitter(zookeeperConnection, handlerId, bFromBeginning, topic='InfosphereEvents') {
 
   const self = this;
 
@@ -59,7 +60,7 @@ function InfosphereEventEmitter(zookeeperConnection, handlerId, bFromBeginning) 
 
   const client = new kafka.Client(zookeeperConnection, handlerId);
   const consumerOpts = { groupId: handlerId, autoCommit: false, fromOffset: true };
-  const payload = { topic: 'InfosphereEvents' };
+  const payload = { topic: topic };
   const offset = new kafka.Offset(client);
 
   function commitEvent(kafkaEventCtx, bVerbose) {
@@ -72,11 +73,11 @@ function InfosphereEventEmitter(zookeeperConnection, handlerId, bFromBeginning) 
       }
     });
   }
-    
+
   function emitEvent(message) {
     const infosphereEvent = JSON.parse(message.value);
     const eventCtx = { topic: message.topic, offset: message.offset, partition: message.partition };
-    self.emit(infosphereEvent.eventType, infosphereEvent, eventCtx, commitEvent);
+    self.emit(topic, infosphereEvent, eventCtx, commitEvent);
   }
 
   function handleEvents(consumer) {
@@ -90,8 +91,10 @@ function InfosphereEventEmitter(zookeeperConnection, handlerId, bFromBeginning) 
     
     process.on('SIGINT', function () {
       consumer.close(true, function () {
-        self.emit('end');
-        process.exit();
+        client.close(function() {
+          self.emit('end');
+          process.exit();
+        });
       });
     });
   }
@@ -101,12 +104,12 @@ function InfosphereEventEmitter(zookeeperConnection, handlerId, bFromBeginning) 
     console.log("Consuming all events, from the beginning...");
     // Retrieve the earliest offset for the topic (it will not always be 0)
     let firstEvent = 0;
-    offset.fetch([{ topic: 'InfosphereEvents', partition: 0, time: -2, maxNum: 1 }], function (err, data) {
+    offset.fetch([{ topic: topic, partition: 0, time: -2, maxNum: 1 }], function (err, data) {
       
       if (err !== null) {
         self.emit('error', "Unable to retrieve an initial offset -- " + err);
       } else {
-        firstEvent = data.InfosphereEvents["0"][0];
+        firstEvent = data[topic]["0"][0];
       }
 
       payload.offset = firstEvent;
@@ -122,12 +125,12 @@ function InfosphereEventEmitter(zookeeperConnection, handlerId, bFromBeginning) 
 
     // Retrieve the last committed offset for the topic (it will be -1 if the handler is new)
     let lastCommit = -1;
-    offset.fetchCommits(handlerId, [{ topic: 'InfosphereEvents', partition: 0 }], function (err, data) {
+    offset.fetchCommits(handlerId, [{ topic: topic, partition: 0 }], function (err, data) {
 
       if (err !== null) {
         self.emit('error', "Unable to retrieve the last committed offset -- " + err);
       } else {
-        lastCommit = data.InfosphereEvents["0"];
+        lastCommit = data[topic]["0"];
       }
 
       // If we still come back with '-1' as the last committed offset, we need to start at the beginning...
