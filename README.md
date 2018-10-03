@@ -29,13 +29,14 @@ infosphereEventEmitter.on('IGC_DATABASESGROUP_EVENT', function(infosphereEvent, 
 
 ## InfosphereEventEmitter
 
-Connects to Kafka on the specified system and emits any events raised, based on their eventType
+Connects to Kafka on the specified system and emits any events raised, based on the specified parameter
 
 **Parameters**
 
 -   `zookeeperConnection` **[string](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String)** the hostname of the domain (services) tier of the Information Server environment and port number to connect to Zookeeper service (e.g. hostname:52181)
 -   `handlerId` **[string](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String)** a unique identity for the handler (allowing multiple handlers to consume the same events)
 -   `bFromBeginning` **[boolean](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Boolean)?** if true, process all events from the beginning of tracking in Information Server
+-   `topic` **[string](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String)?** name of the topic for which to emit events (optional, default `'InfosphereEvents'`)
 
 ## eventCommitCallback
 
