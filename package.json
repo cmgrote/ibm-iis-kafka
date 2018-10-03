@@ -9,7 +9,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "kafka-node": ">=0.5.6"
+    "kafka-node": ">=3.0.0"
   },
   "devDependencies": {
     "jsdoc": "^3.4.0",
